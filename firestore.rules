@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /projects/{projectID} {
+      // Allow users to create projects if they assign them to themselves
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      
+      // Allow users to read/update/delete their own projects
+      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+
+      // Allow anonymous users (Worker) to read and update any project
+      // Note: In a production environment, the worker should use the Admin SDK instead.
+      allow read, update: if request.auth != null && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+  }
+}
