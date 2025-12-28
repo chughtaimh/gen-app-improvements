@@ -1,66 +1,89 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+import React from 'react';
+import { loginWithGoogle, logout, useUser } from '@/lib/firebase/auth';
 
 export default function Home() {
+  const { user, loading } = useUser();
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.js file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen flex-col flex-center" style={{ padding: '0 2rem', paddingTop: '100px' }}>
+      {/* Navbar overlay */}
+      <nav className="navbar">
+        <div className="nav-logo">UX AI AGENT</div>
+        {!loading && (
+          <div>
+            {user ? (
+              <div className="flex-row items-center gap-4">
+                <span className="text-sm" style={{ color: '#888' }}>{user.email}</span>
+                <button onClick={logout} className="text-sm" style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer' }}>Sign Out</button>
+              </div>
+            ) : (
+              <button
+                onClick={loginWithGoogle}
+                className="btn-outline btn"
+                style={{ borderRadius: '20px', padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+              >
+                Sign In
+              </button>
+            )}
+          </div>
+        )}
+      </nav>
+
+      {/* Hero Content */}
+      <div className="text-center animate-in" style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '99px', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1.5rem', color: '#ccc' }}>
+          AI-Powered Product Analyst
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <h1>
+          Evaluate your product <br />
+          <span className="text-gradient">in seconds, not weeks.</span>
+        </h1>
+
+        <p style={{ margin: '0 auto 2rem auto', fontSize: '1.2rem' }}>
+          Deploy an autonomous AI agent to navigate your site, analyze UX friction,
+          and generate a comprehensive product report with actionable improvements.
+        </p>
+
+        <div className="flex-center gap-4 flex-col-mobile" style={{ marginTop: '2rem', flexWrap: 'wrap' }}>
+          {user ? (
+            <button
+              onClick={() => window.location.href = '/dashboard'}
+              className="btn btn-primary"
+              style={{ padding: '1rem 2.5rem', fontSize: '1.1rem' }}
+            >
+              Start New Evaluation
+            </button>
+          ) : (
+            <button
+              onClick={loginWithGoogle}
+              className="btn btn-primary"
+              style={{ padding: '1rem 2.5rem', fontSize: '1.1rem' }}
+            >
+              Sign In to Start
+            </button>
+          )}
+
+          <button className="btn btn-outline" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem' }}>
+            View Sample Report
+          </button>
         </div>
-      </main>
-    </div>
+      </div>
+
+      {/* Feature Cards */}
+      <div className="grid-cols-3 w-full" style={{ maxWidth: '1100px', marginTop: '6rem' }}>
+        {[
+          { title: "Smart Navigation", desc: "Our agent explores your app like a real user, clicking, scrolling, and interacting." },
+          { title: "Multimodal Analysis", desc: "Gemini 1.5 Pro analyzes video & screenshots to understand design intent." },
+          { title: "Actionable Plan", desc: "Receive a prioritized list of tasks, ready to export to your issue tracker." }
+        ].map((item, i) => (
+          <div key={i} className="glass-card">
+            <h3>{item.title}</h3>
+            <p className="text-sm">{item.desc}</p>
+          </div>
+        ))}
+      </div>
+    </main>
   );
 }
