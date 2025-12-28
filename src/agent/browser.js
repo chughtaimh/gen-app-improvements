@@ -85,7 +85,16 @@ class BrowserAgent {
             console.error(`[Agent] Error during navigation: ${error.message}`);
             // Don't throw immediately, allow cleanup to save video/logs
         } finally {
-            await this.close();
+            console.log('[Agent DEBUG] Inside finally. Type of this:', typeof this);
+            console.log('[Agent DEBUG] keys of this:', Object.keys(this));
+            console.log('[Agent DEBUG] Type of this.close:', typeof this.close);
+            if (typeof this.close === 'function') {
+                await this.close();
+            } else {
+                console.error('[Agent CRITICAL] this.close is NOT a function!');
+                // Attempt manual cleanup if possible
+                if (this.browser && this.browser.close) await this.browser.close();
+            }
 
             // Find video
             if (await fs.pathExists(this.artifactsDir)) {

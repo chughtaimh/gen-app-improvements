@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase/config';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, deleteField } from 'firebase/firestore';
 import { useUser } from '@/lib/firebase/auth';
 import { rerunProject } from '@/app/actions/rerunProject';
 
@@ -70,7 +70,23 @@ export default function ProjectPage() {
                         onClick={async () => {
                             if (confirm('Are you sure you want to re-run this evaluation?')) {
                                 setLoading(true); // Optimistic UI
-                                await rerunProject(project.id || id);
+                                try {
+                                    // 1. Reset project status on Client (where we have Auth)
+                                    await updateDoc(doc(db, "projects", project.id || id), {
+                                        status: 'queued',
+                                        report: deleteField(),
+                                        results: deleteField(),
+                                        error: deleteField(),
+                                        completedAt: deleteField()
+                                    });
+
+                                    // 2. Revalidate cache on Server
+                                    await rerunProject(project.id || id);
+                                } catch (err) {
+                                    console.error("Failed to re-run:", err);
+                                    alert("Failed to restart evaluation. Check console.");
+                                    setLoading(false);
+                                }
                                 // The snapshot listener will pick up the change to 'queued'
                             }
                         }}
