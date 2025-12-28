@@ -98,7 +98,7 @@ export default function CreateProjectForm() {
                         className="text-sm flex-center"
                         style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: 0 }}
                     >
-                        {showAdvanced ? 'Hide Advanced Options ▲' : 'Show Advanced Options ▼'}
+                        {showAdvanced ? 'Hide Advanced Options ▲' : 'Show Advanced Options +'}
                     </button>
 
                     {showAdvanced && (
