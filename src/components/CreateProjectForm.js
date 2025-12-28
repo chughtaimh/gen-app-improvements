@@ -10,6 +10,9 @@ export default function CreateProjectForm() {
     const router = useRouter();
     const [url, setUrl] = useState('');
     const [description, setDescription] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -36,6 +39,10 @@ export default function CreateProjectForm() {
                 createdAt: serverTimestamp(),
                 // Default settings for now
                 isPremium: false,
+                auth: {
+                    email: email || null,
+                    password: password || null
+                }
             });
 
             console.log("Project created with ID: ", docRef.id);
@@ -81,6 +88,48 @@ export default function CreateProjectForm() {
                         className="input-field"
                         style={{ resize: 'none' }}
                     />
+                </div>
+
+                {/* Advanced Options Toggle */}
+                <div style={{ marginTop: '0.5rem' }}>
+                    <button
+                        type="button"
+                        onClick={() => setShowAdvanced(!showAdvanced)}
+                        className="text-sm flex-center"
+                        style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: 0 }}
+                    >
+                        {showAdvanced ? 'Hide Advanced Options ▲' : 'Show Advanced Options ▼'}
+                    </button>
+
+                    {showAdvanced && (
+                        <div className="animate-in" style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                            <h4 className="text-sm" style={{ marginBottom: '1rem', color: '#ccc' }}>Authentication Credentials (Optional)</h4>
+                            <div className="flex-col gap-3">
+                                <div className="flex-col gap-1">
+                                    <label htmlFor="email" className="text-xs" style={{ color: '#888' }}>Email / Username</label>
+                                    <input
+                                        id="email"
+                                        type="text"
+                                        placeholder="user@example.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className="input-field"
+                                    />
+                                </div>
+                                <div className="flex-col gap-1">
+                                    <label htmlFor="password" className="text-xs" style={{ color: '#888' }}>Password</label>
+                                    <input
+                                        id="password"
+                                        type="password"
+                                        placeholder="••••••••"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="input-field"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {error && (

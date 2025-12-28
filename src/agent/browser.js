@@ -61,13 +61,25 @@ class BrowserAgent {
             console.log(`[Agent] Navigating to ${url}...`);
             await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-            // 1. Handle Auth
-            if (auth && auth.password) {
-                await this.handleAuthentication(auth);
-            }
-
-            // 2. Exploration (BFS Crawl)
+            // Phase 1: Public Exploration (BFS Crawl)
+            console.log('[Agent] Starting Phase 1: Public Exploration');
             await this.crawl(url, results);
+
+            // Phase 2: Authenticated Exploration
+            if (auth && (auth.password || auth.email)) {
+                console.log('[Agent] Starting Phase 2: Authenticated Exploration');
+                const loggedIn = await this.handleAuthentication(auth);
+
+                if (loggedIn) {
+                    // Reset visited for the start URL to ensure we re-analyze the dashboard/landing state
+                    // We keep the rest of visited to avoid re-crawling static pages unless linked again
+                    this.visited.delete(this.normalizeUrl(url));
+
+                    // Resume crawling from the current page (which should be the dashboard after login)
+                    const currentUrl = this.page.url();
+                    await this.crawl(currentUrl, results);
+                }
+            }
 
         } catch (error) {
             console.error(`[Agent] Error during navigation: ${error.message}`);
@@ -87,18 +99,56 @@ class BrowserAgent {
     }
 
     async handleAuthentication(auth) {
-        console.log('[Agent] Checking for authentication...');
+        console.log('[Agent] Attempting authentication...');
         try {
-            const passwordInput = await this.page.$('input[type="password"]');
-            if (passwordInput) {
-                console.log('[Agent] Password field found. Authenticating...');
+            // 1. Check if we are already on a login page, if not, try to find a login link
+            // For MVP, we assume we might be on the login page OR we can find one.
+            // If we are deep in the site, maybe we need to go back to home? 
+            // Let's assume the agent is "smart" enough or the user provided the login URL? 
+            // Actually, the user provides the "Target URL". 
+            // If the agent crawled around, it might be anywhere.
+            // Let's try to identify login inputs on the CURRENT page first.
+
+            let emailInput = await this.page.$('input[type="email"], input[name="email"], input[name="username"], input[name="login"]');
+            let passwordInput = await this.page.$('input[type="password"]');
+
+            if (!emailInput && !passwordInput) {
+                console.log('[Agent] No login fields found on current page. Searching for "Login" or "Sign In" links...');
+                // Try to find a link
+                const loginLink = await this.page.getByText(/log in|sign in/i).first();
+                if (await loginLink.isVisible()) {
+                    await loginLink.click();
+                    await this.page.waitForTimeout(2000);
+                    // Re-query inputs
+                    emailInput = await this.page.$('input[type="email"], input[name="email"], input[name="username"], input[name="login"]');
+                    passwordInput = await this.page.$('input[type="password"]');
+                }
+            }
+
+            if (auth.email && emailInput) {
+                console.log(`[Agent] Filling email: ${auth.email}`);
+                await emailInput.fill(auth.email);
+            }
+
+            if (auth.password && passwordInput) {
+                console.log('[Agent] Filling password...');
                 await passwordInput.fill(auth.password);
                 await this.page.keyboard.press('Enter');
-                await this.page.waitForNavigation({ waitUntil: 'networkidle', timeout: 10000 }).catch(() => { });
-                console.log('[Agent] Authentication step complete.');
+
+                // Wait for navigation
+                await this.page.waitForNavigation({ waitUntil: 'networkidle', timeout: 15000 }).catch(() => {
+                    console.log('[Agent] Warning: Navigation timeout after login submit (might be SPA update).');
+                });
+                console.log('[Agent] Authentication process finished.');
+                return true;
+            } else {
+                console.log('[Agent] Could not find password field. excessive auth attempt aborted.');
+                return false;
             }
+
         } catch (e) {
-            console.log(`[Agent] Auth attempt failed (or not needed): ${e.message}`);
+            console.log(`[Agent] Auth attempt failed: ${e.message}`);
+            return false;
         }
     }
 
