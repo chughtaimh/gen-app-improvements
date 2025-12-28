@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useUser } from '@/lib/firebase/auth';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase/config';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import CreateProjectForm from '@/components/CreateProjectForm';
 
 export default function Dashboard() {
@@ -24,8 +24,7 @@ export default function Dashboard() {
 
         const q = query(
             collection(db, "projects"),
-            where("userId", "==", user.uid),
-            orderBy("createdAt", "desc")
+            where("userId", "==", user.uid)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -33,6 +32,15 @@ export default function Dashboard() {
                 id: doc.id,
                 ...doc.data()
             }));
+
+            // Client-side sort (newest first)
+            // Handle pending serverTimestamp() which is null initially
+            projs.sort((a, b) => {
+                const timeA = a.createdAt?.seconds || Number.MAX_SAFE_INTEGER;
+                const timeB = b.createdAt?.seconds || Number.MAX_SAFE_INTEGER;
+                return timeB - timeA;
+            });
+
             setProjects(projs);
         });
 
@@ -78,8 +86,8 @@ export default function Dashboard() {
                                 <div key={p.id} className="glass-card" onClick={() => router.push(`/projects/${p.id}`)} style={{ cursor: 'pointer', padding: '1.5rem' }}>
                                     <div className="flex-row justify-between items-center mb-4">
                                         <span className={`badge ${p.status === 'completed' ? 'badge-success' :
-                                                p.status === 'failed' ? 'badge-error' :
-                                                    'badge-info'
+                                            p.status === 'failed' ? 'badge-error' :
+                                                'badge-info'
                                             }`}>
                                             {p.status}
                                         </span>
