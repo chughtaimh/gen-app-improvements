@@ -66,7 +66,7 @@ async function processJob(projectId, data) {
 
         // 2. Browser Agent
         const agent = new BrowserAgent(projectId);
-        const results = await agent.navigateAndRecord(data.url);
+        const results = await agent.navigateAndRecord(data.url, data.auth);
         results.projectId = projectId; // Inject ID for Analyst to find files
 
         // 3. Update Status: Analyzing

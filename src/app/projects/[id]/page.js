@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase/config';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useUser } from '@/lib/firebase/auth';
+import { rerunProject } from '@/app/actions/rerunProject';
 
 export default function ProjectPage() {
     const { id } = useParams();
@@ -56,11 +57,29 @@ export default function ProjectPage() {
                     <p>{project.description || 'No description provided.'}</p>
                 </div>
                 <div className={`badge ${project.status === 'completed' ? 'badge-success' :
-                        project.status === 'failed' ? 'badge-error' :
-                            'badge-info'
+                    project.status === 'failed' ? 'badge-error' :
+                        'badge-info'
                     }`}>
                     STATUS: {project.status.toUpperCase()}
                 </div>
+            </div>
+
+            <div style={{ marginBottom: '2rem' }}>
+                {(project.status === 'completed' || project.status === 'failed') && (
+                    <button
+                        onClick={async () => {
+                            if (confirm('Are you sure you want to re-run this evaluation?')) {
+                                setLoading(true); // Optimistic UI
+                                await rerunProject(project.id || id);
+                                // The snapshot listener will pick up the change to 'queued'
+                            }
+                        }}
+                        className="btn-primary" // Assuming this class exists or similar style
+                        style={{ padding: '0.5rem 1rem', background: '#3b82f6', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}
+                    >
+                        ↻ Re-run Evaluation
+                    </button>
+                )}
             </div>
 
             {project.status === 'failed' && (
