@@ -1,0 +1,27 @@
+{
+  "name": "gen-app-improvements",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "axe-core": "^4.11.0",
+    "dotenv": "^17.2.3",
+    "firebase": "^12.7.0",
+    "fs-extra": "^11.3.3",
+    "next": "16.1.1",
+    "playwright": "^1.57.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "stripe": "^20.1.0"
+  },
+  "devDependencies": {
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1"
+  }
+}
