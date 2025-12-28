@@ -101,8 +101,38 @@ async function processJob(projectId, data) {
     }
 }
 
+/**
+ * Recursively removes undefined values from an object.
+ * Firestore does not accept 'undefined' as a value.
+ */
+function sanitizePayload(obj) {
+    if (obj && typeof obj === 'object') {
+        const cleaned = Array.isArray(obj) ? [] : {};
+        Object.keys(obj).forEach(key => {
+            const value = obj[key];
+            if (value !== undefined) {
+                cleaned[key] = sanitizePayload(value);
+            }
+        });
+        return cleaned;
+    }
+    return obj;
+}
+
 async function updateProject(id, data) {
-    await updateDoc(doc(db, "projects", id), data);
+    try {
+        const cleanData = sanitizePayload(data);
+        await updateDoc(doc(db, "projects", id), cleanData);
+    } catch (e) {
+        console.error(`[Worker] Firestore update failed for ${id}:`, e);
+        // Fallback: try to save just the error if the payload was too complex or bad
+        if (data.status !== 'failed') {
+            await updateDoc(doc(db, "projects", id), {
+                status: 'failed',
+                error: `Persistence Error: ${e.message}`
+            }).catch(err => console.error("Could not even save error state:", err));
+        }
+    }
 }
 
 // Start

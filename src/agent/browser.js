@@ -225,6 +225,17 @@ class BrowserAgent {
             return url;
         }
     }
+
+    async close() {
+        if (this.context) {
+            await this.context.close();
+            this.context = null;
+        }
+        if (this.browser) {
+            await this.browser.close();
+            this.browser = null;
+        }
+    }
 }
 
 module.exports = BrowserAgent;
