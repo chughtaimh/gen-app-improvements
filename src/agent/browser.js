@@ -16,7 +16,7 @@ class BrowserAgent {
         this.visited = new Set();
         this.MAX_PAGES = 50; // Increased depth
         this.MAX_DURATION_MS = 90 * 1000; // 90 Seconds cap (User Request)
-        this.MIN_DURATION_MS = 15 * 1000; // 15 Seconds minimum (SPA User Request)
+        this.MIN_DURATION_MS = 30 * 1000; // 30 Seconds minimum (User Request)
         this.startTime = 0;
     }
 
