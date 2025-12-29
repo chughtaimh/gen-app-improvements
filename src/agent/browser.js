@@ -15,7 +15,8 @@ class BrowserAgent {
         this.artifactsDir = path.resolve(process.cwd(), 'public', 'artifacts', projectId);
         this.visited = new Set();
         this.MAX_PAGES = 50; // Increased depth
-        this.MAX_DURATION_MS = 3 * 60 * 1000; // 3 Minutes cap
+        this.MAX_DURATION_MS = 90 * 1000; // 90 Seconds cap (User Request)
+        this.MIN_DURATION_MS = 15 * 1000; // 15 Seconds minimum (SPA User Request)
         this.startTime = 0;
     }
 
@@ -85,7 +86,7 @@ class BrowserAgent {
 
                 if (loggedIn) {
                     // Reset visited for the start URL to ensure we re-analyze the dashboard/landing state
-                    // We keep the rest of visited to avoid re-crawling static pages unless linked again
+                    // We need to be careful with normalized URLs for SPAs here
                     this.visited.delete(this.normalizeUrl(url));
 
                     // Resume crawling from the current page (which should be the dashboard after login)
@@ -234,10 +235,60 @@ class BrowserAgent {
 
         let pageCount = 0;
 
-        while (queue.length > 0 && pageCount < this.MAX_PAGES) {
-            // GLOBAl TIME LIMIT CHECK
-            if (Date.now() - this.startTime > this.MAX_DURATION_MS) {
+        // Main Loop
+        while (true) {
+            // 1. DURATION CHECKS
+            const elapsed = Date.now() - this.startTime;
+
+            if (elapsed > this.MAX_DURATION_MS) {
                 console.log('[Agent] Time limit reached. Stopping crawl.');
+                break;
+            }
+
+            // 2. QUEUE PROCESSING
+            if (queue.length === 0) {
+                if (elapsed < this.MIN_DURATION_MS) {
+                    console.log(`[Agent] Queue empty but only ${Math.round(elapsed / 1000)}s elapsed. Entering Deep Exploration...`);
+
+                    // DEEP EXPLORATION / ACTIVE WAITING
+                    // Scroll to bottom and top to trigger possible lazy loads
+                    await this.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+                    await this.page.waitForTimeout(1000);
+                    await this.page.evaluate(() => window.scrollTo(0, 0));
+                    await this.page.waitForTimeout(1000);
+
+                    // Re-scan for links (maybe new ones appeared?)
+                    const links = await this.extractInternalLinks(startUrl);
+                    let foundNew = false;
+                    for (const link of links) {
+                        const normalized = this.normalizeUrl(link);
+                        if (!this.visited.has(normalized)) {
+                            this.visited.add(normalized);
+                            queue.push(link);
+                            foundNew = true;
+                        }
+                    }
+
+                    if (foundNew) {
+                        console.log('[Agent] Deep exploration found new links! Continuing...');
+                        continue;
+                    }
+
+                    // Scan for interactions AGAIN if we are truly stuck
+                    // Maybe we missed some or they are dynamic
+                    await this.exploreInteractions(results);
+
+                    // Still empty? Just wait a bit to consume min duration time
+                    await this.page.waitForTimeout(2000);
+                    continue;
+                } else {
+                    console.log('[Agent] Queue empty and minimum duration met. Finishing.');
+                    break;
+                }
+            }
+
+            if (pageCount >= this.MAX_PAGES) {
+                console.log('[Agent] Page limit reached.');
                 break;
             }
 
@@ -245,6 +296,7 @@ class BrowserAgent {
             // console.log(`[Agent] Exploring (${pageCount + 1}/${this.MAX_PAGES}): ${currentUrl}`);
 
             // Navigate if not already there (first page is already loaded if it's startUrl)
+            // Note: For SPAs, currentUrl might just be a hash change
             if (this.page.url() !== currentUrl) {
                 try {
                     await this.page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
@@ -445,8 +497,12 @@ class BrowserAgent {
                     const u = new URL(href);
                     // Must be same origin
                     if (u.origin !== currentUrlBase) return false;
-                    // Ignore anchors/hashes on same page
-                    if (u.hash && u.pathname === new URL(document.location.href).pathname) return false;
+
+                    // SPA SUPPORT: Allow hashes now!
+                    // But prevent identical page loops
+                    const currentU = new URL(this.page.url());
+                    if (u.href === currentU.href) return false; // Exactly same
+
                     // Ignore common non-pages
                     if (href.endsWith('.pdf') || href.endsWith('.jpg') || href.endsWith('.png')) return false;
                     return true;
@@ -467,9 +523,10 @@ class BrowserAgent {
             // Remove trailing slash for consistency
             let path = u.pathname;
             if (path.endsWith('/') && path.length > 1) path = path.slice(0, -1);
-            return u.origin + path; // Ignore query params for visited check? Maybe keep them?
-            // For simple site crawling, ignoring query params is safer to avoid infinite loops, 
-            // but might miss dynamic content. Let's keep it simple: Origin + Path
+
+            // SPA SUPPORT: Include HASH in the normalization key now
+            // so #/dashboard and #/settings are seen as different
+            return u.origin + path + u.hash;
         } catch {
             return url;
         }
