@@ -251,11 +251,26 @@ class BrowserAgent {
                     console.log(`[Agent] Queue empty but only ${Math.round(elapsed / 1000)}s elapsed. Entering Deep Exploration...`);
 
                     // DEEP EXPLORATION / ACTIVE WAITING
-                    // Scroll to bottom and top to trigger possible lazy loads
-                    await this.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-                    await this.page.waitForTimeout(1000);
-                    await this.page.evaluate(() => window.scrollTo(0, 0));
-                    await this.page.waitForTimeout(1000);
+                    try {
+                        // Scroll to bottom and top to trigger possible lazy loads
+                        // Safe check for body existence
+                        await this.page.evaluate(() => {
+                            if (document.body) {
+                                window.scrollTo(0, document.body.scrollHeight);
+                            }
+                        });
+                        await this.page.waitForTimeout(1000);
+                        await this.page.evaluate(() => {
+                            if (document.body) {
+                                window.scrollTo(0, 0);
+                            }
+                        });
+                        await this.page.waitForTimeout(1000);
+                    } catch (scrollError) {
+                        console.log(`[Agent] Scroll attempt failed (ignoring): ${scrollError.message}`);
+                        // Even if scroll fails, we wait to honor MIN_DURATION
+                        await this.page.waitForTimeout(2000);
+                    }
 
                     // Re-scan for links (maybe new ones appeared?)
                     const links = await this.extractInternalLinks(startUrl);
