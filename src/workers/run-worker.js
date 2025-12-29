@@ -78,12 +78,11 @@ async function processJob(projectId, data) {
         // 5. Complete
         await updateProject(projectId, {
             status: 'completed',
-            results: results, // Should probably upload files and store URLs, but for MVP local path ok?
-            // Actually front-end can't read local paths. 
-            // For MVP Demo: We just store the filename and assume front-end serves from public/artifacts 
-            // (This requires next.js config change to serve public/artifacts if it's outside?) 
-            // Wait, BrowserAgent saves to `public/artifacts`. Next.js serves `public` folder automatically!
-            // So path should be `/artifacts/${projectId}/${filename}`
+            results: {
+                ...results,
+                videoUrl: results.videoPath ? `/artifacts/${projectId}/${results.videoPath}` : null
+            },
+            // Legacy comments removed
             report: analysis,
             completedAt: serverTimestamp()
         });

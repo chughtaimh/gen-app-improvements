@@ -67,6 +67,7 @@ class Analyst {
         }
 
         // 2. Construct Prompt
+        // 2. Construct Prompt
         const prompt = `
     You are an expert Product Manager and UX Researcher.
     I have an agent that navigated a website (${agentResults.url}).
@@ -77,12 +78,17 @@ class Analyst {
     - Accessibility Violations: ${JSON.stringify(agentResults.accessibility?.violations?.length || 0)}
     - Console Errors: ${agentResults.consoleLogs.filter(l => l.type === 'error').length}
     
-    Attached are screenshots of the user journey (Initial view -> Scroll -> Navigation).
+    ### Action Log (User Journey)
+    The agent attempted to interact with the page. Here is the log of actions:
+    ${JSON.stringify(agentResults.actionLog || [], null, 2)}
+
+    Attached are screenshots of the user journey (Initial view -> Scroll -> Navigation -> Interactions).
 
     YOUR TASK:
     1. **Infer Intent**: If not obvious, deduce the target audience and value proposition.
-    2. **Evaluate**: Analyze the UX friction, visual hierarchy, clarity of copy, and conversion potential.
-    3. **Report**: Output a JSON object with the following structure:
+    2. **Evaluate Journey**: Analyze the 'Action Log'. Did the agent get stuck? Did buttons work? Did forms have validation?
+    3. **Evaluate UI/UX**: Analyze the screenshots for design quality, hierarchy, and clarity.
+    4. **Report**: Output a JSON object with the following structure:
     
     {
       "summary": "Executive summary of the experience...",

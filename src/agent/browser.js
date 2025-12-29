@@ -50,7 +50,8 @@ class BrowserAgent {
             networkErrors: [],
             title: '',
             metaDescription: '',
-            pagesVisited: []
+            pagesVisited: [],
+            actionLog: []
         };
 
         // Event listeners
@@ -169,7 +170,7 @@ class BrowserAgent {
 
         while (queue.length > 0 && pageCount < this.MAX_PAGES) {
             const currentUrl = queue.shift();
-            console.log(`[Agent] Exploring (${pageCount + 1}/${this.MAX_PAGES}): ${currentUrl}`);
+            // console.log(`[Agent] Exploring (${pageCount + 1}/${this.MAX_PAGES}): ${currentUrl}`);
 
             // Navigate if not already there (first page is already loaded if it's startUrl)
             if (this.page.url() !== currentUrl) {
@@ -190,7 +191,18 @@ class BrowserAgent {
             // Collect metadata if empty
             if (!results.title) results.title = pageData.title;
 
-            // Find new links
+            // Log navigation
+            results.actionLog.push({
+                timestamp: new Date().toISOString(),
+                type: 'navigation',
+                url: currentUrl,
+                description: `Navigated to ${currentUrl}`
+            });
+
+            // Explore Interactions (Depth)
+            await this.exploreInteractions(results);
+
+            // Find new links (Breadth)
             const links = await this.extractInternalLinks(startUrl);
             for (const link of links) {
                 const normalized = this.normalizeUrl(link);
@@ -201,6 +213,92 @@ class BrowserAgent {
             }
 
             pageCount++;
+        }
+    }
+
+    async exploreInteractions(results) {
+        console.log('[Agent] Exploring interactions on page...');
+
+        // 1. Interactive Elements Discovery
+        // Look for buttons, links that look like buttons, etc.
+        const candidates = await this.page.$$('button, input[type="submit"], input[type="button"], a[role="button"], [role="button"]');
+
+        // Limit interactions per page to avoid getting stuck
+        const MAX_INTERACTIONS = 3;
+        let interactions = 0;
+
+        for (const el of candidates) {
+            if (interactions >= MAX_INTERACTIONS) break;
+
+            try {
+                const isVisible = await el.isVisible();
+                if (!isVisible) continue;
+
+                const text = await el.innerText().catch(() => 'element');
+                // Skip dangerous interactions or common nav interactions we pick up otherwise
+                if (text.match(/delete|remove|sign out|log out/i)) continue;
+
+                // Log BEFORE action
+                console.log(`[Agent] Interaction candidates: clicking "${text}"`);
+
+                // Screenshot before? Maybe too expensive.
+
+                await el.click({ timeout: 1000 }).catch(e => console.log('Click failed', e.message));
+                interactions++;
+
+                results.actionLog.push({
+                    timestamp: new Date().toISOString(),
+                    type: 'click',
+                    selector: await el.evaluate(e => e.tagName), // Simple tag name
+                    description: `Clicked "${text.substring(0, 30)}..."`
+                });
+
+                await this.page.waitForTimeout(500); // Observe effect
+
+                // Simple state check (did modal appear?)
+                // For MVP, just interactions are recorded.
+            } catch (e) {
+                // Ignore
+            }
+        }
+
+        // 2. Form Exploration (with Guardrails)
+        const inputs = await this.page.$$('input:not([type="hidden"]), textarea');
+        for (const input of inputs) {
+            try {
+                if (!(await input.isVisible())) continue;
+
+                const type = await input.getAttribute('type') || 'text';
+                const name = await input.getAttribute('name') || '';
+                const placeholder = await input.getAttribute('placeholder') || '';
+
+                // GUARDRAIL: Skip Password Fields
+                if (type === 'password' || name.match(/password|pwd/i)) {
+                    console.log('[Agent GUARDRAIL] Skipping password field');
+                    continue;
+                }
+
+                // GUARDRAIL: Use Safe Dummy Data
+                let safeValue = 'Test Input';
+                if (type === 'email' || name.match(/email/i)) safeValue = 'test_visitor@example.com';
+                else if (name.match(/name/i)) safeValue = 'Test User';
+                else if (name.match(/phone|tel/i)) safeValue = '555-0199';
+                else if (type === 'number') safeValue = '10';
+
+                // Only fill if empty
+                const currentVal = await input.inputValue();
+                if (!currentVal) {
+                    await input.fill(safeValue);
+                    results.actionLog.push({
+                        timestamp: new Date().toISOString(),
+                        type: 'input',
+                        selector: `input[name="${name}"]`,
+                        description: `Filled "${safeValue}" into ${name || placeholder || 'input'}`
+                    });
+                }
+            } catch (e) {
+                // ignore
+            }
         }
     }
 
