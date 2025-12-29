@@ -14,7 +14,9 @@ class BrowserAgent {
         this.page = null;
         this.artifactsDir = path.resolve(process.cwd(), 'public', 'artifacts', projectId);
         this.visited = new Set();
-        this.MAX_PAGES = 20; // Safety limit
+        this.MAX_PAGES = 50; // Increased depth
+        this.MAX_DURATION_MS = 3 * 60 * 1000; // 3 Minutes cap
+        this.startTime = 0;
     }
 
     async init() {
@@ -58,6 +60,8 @@ class BrowserAgent {
         this.page.on('console', msg => results.consoleLogs.push({ type: msg.type(), text: msg.text() }));
         this.page.on('pageerror', err => results.consoleLogs.push({ type: 'error', text: err.message }));
 
+        this.startTime = Date.now();
+
         try {
             console.log(`[Agent] Navigating to ${url}...`);
             await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -77,7 +81,7 @@ class BrowserAgent {
                     await this.page.goto(url, { waitUntil: 'domcontentloaded' });
                 }
 
-                const loggedIn = await this.handleAuthentication(auth);
+                const loggedIn = await this.handleAuthentication(auth, results);
 
                 if (loggedIn) {
                     // Reset visited for the start URL to ensure we re-analyze the dashboard/landing state
@@ -113,9 +117,19 @@ class BrowserAgent {
         return results;
     }
 
-    async handleAuthentication(auth) {
+    async handleAuthentication(auth, results) {
         console.log('[Agent] Attempting authentication...');
         try {
+            // Helper to log actions
+            const logAction = (type, desc, selector = '') => {
+                results.actionLog.push({
+                    timestamp: new Date().toISOString(),
+                    type,
+                    selector,
+                    description: desc
+                });
+            };
+
             // 1. Wait for inputs to appear (handle simple SPAs/hydration)
             // We use a small timeout to "wait" for them, but don't fail hard if not found immediately,
             // so we can try looking for a "Login" link.
@@ -136,6 +150,7 @@ class BrowserAgent {
                 const loginLink = await this.page.getByText(/log in|sign in/i).first();
                 if (await loginLink.isVisible()) {
                     await loginLink.click();
+                    logAction('click', 'Clicked Login/Sign In link');
                     // Wait for navigation or modal
                     await this.page.waitForTimeout(2000);
                     // Re-query inputs
@@ -147,19 +162,61 @@ class BrowserAgent {
             if (auth.email && emailInput) {
                 console.log(`[Agent] Filling email: ${auth.email}`);
                 await emailInput.fill(auth.email);
+                logAction('input', `Filled email: ${auth.email}`, 'input[name="email"]');
             }
 
             if (auth.password && passwordInput) {
                 console.log('[Agent] Filling password...');
                 await passwordInput.fill(auth.password);
+                logAction('input', 'Filled password', 'input[type="password"]');
                 await this.page.keyboard.press('Enter');
+                logAction('keypress', 'Pressed Enter to submit');
 
-                // Wait for navigation
-                await this.page.waitForNavigation({ waitUntil: 'networkidle', timeout: 15000 }).catch(() => {
-                    console.log('[Agent] Warning: Navigation timeout after login submit (might be SPA update).');
-                });
-                console.log('[Agent] Authentication process finished.');
-                return true;
+                // SMART WAIT: Poll for success indicators
+                console.log('[Agent] Waiting for authentication success...');
+                const startUrl = this.page.url();
+                let success = false;
+                const startTime = Date.now();
+                const TIMEOUT = 10000; // 10s max wait
+
+                while (Date.now() - startTime < TIMEOUT) {
+                    await this.page.waitForTimeout(500);
+
+                    // Check 1: URL Changed
+                    if (this.page.url() !== startUrl) {
+                        console.log('[Agent] Auth Success: URL changed');
+                        success = true;
+                        break;
+                    }
+
+                    // Check 2: Password field gone (modal closed / form replaced)
+                    // Note: This relies on passwordInput element handle. If page refreshed, handle is stale (throws error) which assumes success too.
+                    try {
+                        if (!(await passwordInput.isVisible())) {
+                            console.log('[Agent] Auth Success: Password field disappeared');
+                            success = true;
+                            break;
+                        }
+                    } catch (e) {
+                        // Stale element means page changed!
+                        console.log('[Agent] Auth Success: Input element stale (page reloaded)');
+                        success = true;
+                        break;
+                    }
+
+                    // Check 3: Dashboard indicators? (Too specific, skipping)
+                }
+
+                if (success) {
+                    logAction('auth', 'Authentication successful');
+                    console.log('[Agent] Authentication process finished successfully.');
+                    return true;
+                } else {
+                    console.log('[Agent] Warning: No obvious auth success detected, but proceeding anyway.');
+                    logAction('auth', 'Authentication finished (unsure of success)');
+                    return true; // Proceed anyway in case we just missed the signal
+                }
+
             } else {
                 console.log('[Agent] Could not find password field. excessive auth attempt aborted.');
                 return false;
@@ -178,6 +235,12 @@ class BrowserAgent {
         let pageCount = 0;
 
         while (queue.length > 0 && pageCount < this.MAX_PAGES) {
+            // GLOBAl TIME LIMIT CHECK
+            if (Date.now() - this.startTime > this.MAX_DURATION_MS) {
+                console.log('[Agent] Time limit reached. Stopping crawl.');
+                break;
+            }
+
             const currentUrl = queue.shift();
             // console.log(`[Agent] Exploring (${pageCount + 1}/${this.MAX_PAGES}): ${currentUrl}`);
 
@@ -233,11 +296,14 @@ class BrowserAgent {
         const candidates = await this.page.$$('button, input[type="submit"], input[type="button"], a[role="button"], [role="button"]');
 
         // Limit interactions per page to avoid getting stuck
-        const MAX_INTERACTIONS = 3;
+        const MAX_INTERACTIONS = 10;
         let interactions = 0;
 
         for (const el of candidates) {
             if (interactions >= MAX_INTERACTIONS) break;
+
+            // Time limit check also here
+            if (Date.now() - this.startTime > this.MAX_DURATION_MS) break;
 
             try {
                 const isVisible = await el.isVisible();
@@ -255,14 +321,31 @@ class BrowserAgent {
                 await el.click({ timeout: 1000 }).catch(e => console.log('Click failed', e.message));
                 interactions++;
 
+                const timestamp = new Date().toISOString();
                 results.actionLog.push({
-                    timestamp: new Date().toISOString(),
+                    timestamp,
                     type: 'click',
                     selector: await el.evaluate(e => e.tagName), // Simple tag name
                     description: `Clicked "${text.substring(0, 30)}..."`
                 });
 
                 await this.page.waitForTimeout(500); // Observe effect
+
+                // POST-INTERACTION SCREENSHOT
+                // We use a unique name based on timestamp
+                const screenshotName = `interaction_${Date.now()}.png`;
+                const screenshotPath = path.join(this.artifactsDir, screenshotName);
+                await this.page.screenshot({ path: screenshotPath });
+
+                // Add to results
+                results.screenshots.push(screenshotName); // Add to analysis queue
+
+                // Log screenshot action
+                results.actionLog.push({
+                    timestamp: new Date().toISOString(),
+                    type: 'screenshot',
+                    description: `Captured state after interaction: ${screenshotName}`
+                });
 
                 // Simple state check (did modal appear?)
                 // For MVP, just interactions are recorded.
