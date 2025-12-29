@@ -179,6 +179,70 @@ export default function ProjectPage() {
                         </p>
                     </div>
 
+                    {/* Session Recording */}
+                    {project.results?.videoUrl && (
+                        <div className="glass-card">
+                            <h2 className="text-xl" style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Session Recording</h2>
+                            <video
+                                src={project.results.videoUrl}
+                                controls
+                                className="w-full"
+                                style={{ width: '100%', borderRadius: '8px', border: '1px solid #333' }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Action Log */}
+                    {project.results?.actionLog && (
+                        <div className="glass-card">
+                            <details className="group">
+                                <summary className="flex-center justify-between" style={{ cursor: 'pointer', listStyle: 'none' }}>
+                                    <h2 className="text-xl" style={{ fontSize: '1.25rem', display: 'inline' }}>
+                                        Agent Action Log <span className="text-sm" style={{ color: '#888', fontWeight: 'normal' }}>({project.results.actionLog.length} steps)</span>
+                                    </h2>
+                                    <span className="text-sm" style={{ color: '#888' }}>▼</span>
+                                </summary>
+                                <div className="mt-4 animate-in" style={{ maxHeight: '400px', overflowY: 'auto', marginTop: '1rem' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid #333', textAlign: 'left', color: '#888' }}>
+                                                <th style={{ padding: '0.75rem 0.5rem' }}>Time</th>
+                                                <th style={{ padding: '0.75rem 0.5rem' }}>Action</th>
+                                                <th style={{ padding: '0.75rem 0.5rem' }}>Details</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {project.results.actionLog.map((action, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                    <td style={{ padding: '0.75rem 0.5rem', color: '#666', fontFamily: 'monospace' }}>
+                                                        {new Date(action.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 0.5rem' }}>
+                                                        <span className={`badge ${action.type === 'click' ? 'badge-warning' :
+                                                                action.type === 'input' ? 'badge-success' :
+                                                                    action.type === 'navigation' ? 'badge-info' :
+                                                                        'badge'
+                                                            }`} style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                            {action.type}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', color: '#ccc' }}>
+                                                        {action.description}
+                                                        {action.selector && (
+                                                            <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.2rem', fontFamily: 'monospace' }}>
+                                                                {action.selector}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </details>
+                        </div>
+                    )}
+
                     {/* Issues & Opportunities */}
                     <div className="grid-cols-3" style={{ gridTemplateColumns: '1fr 1fr' }}>
                         {/* Issues List */}
