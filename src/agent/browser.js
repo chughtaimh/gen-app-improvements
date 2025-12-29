@@ -69,6 +69,14 @@ class BrowserAgent {
             // Phase 2: Authenticated Exploration
             if (auth && (auth.password || auth.email)) {
                 console.log('[Agent] Starting Phase 2: Authenticated Exploration');
+
+                // CRITICAL FIX: Ensure we are back at the start URL (or intended login page) 
+                // because Phase 1 might have navigated away.
+                if (this.page.url() !== url) {
+                    console.log(`[Agent] Returning to ${url} for authentication...`);
+                    await this.page.goto(url, { waitUntil: 'domcontentloaded' });
+                }
+
                 const loggedIn = await this.handleAuthentication(auth);
 
                 if (loggedIn) {
@@ -86,14 +94,11 @@ class BrowserAgent {
             console.error(`[Agent] Error during navigation: ${error.message}`);
             // Don't throw immediately, allow cleanup to save video/logs
         } finally {
-            console.log('[Agent DEBUG] Inside finally. Type of this:', typeof this);
-            console.log('[Agent DEBUG] keys of this:', Object.keys(this));
-            console.log('[Agent DEBUG] Type of this.close:', typeof this.close);
+            // ... cleanup ...
             if (typeof this.close === 'function') {
                 await this.close();
             } else {
-                console.error('[Agent CRITICAL] this.close is NOT a function!');
-                // Attempt manual cleanup if possible
+                // ...
                 if (this.browser && this.browser.close) await this.browser.close();
             }
 
@@ -111,16 +116,19 @@ class BrowserAgent {
     async handleAuthentication(auth) {
         console.log('[Agent] Attempting authentication...');
         try {
-            // 1. Check if we are already on a login page, if not, try to find a login link
-            // For MVP, we assume we might be on the login page OR we can find one.
-            // If we are deep in the site, maybe we need to go back to home? 
-            // Let's assume the agent is "smart" enough or the user provided the login URL? 
-            // Actually, the user provides the "Target URL". 
-            // If the agent crawled around, it might be anywhere.
-            // Let's try to identify login inputs on the CURRENT page first.
+            // 1. Wait for inputs to appear (handle simple SPAs/hydration)
+            // We use a small timeout to "wait" for them, but don't fail hard if not found immediately,
+            // so we can try looking for a "Login" link.
 
-            let emailInput = await this.page.$('input[type="email"], input[name="email"], input[name="username"], input[name="login"]');
-            let passwordInput = await this.page.$('input[type="password"]');
+            // Helper to safe-wait
+            const getField = async (selector) => {
+                try {
+                    return await this.page.waitForSelector(selector, { state: 'visible', timeout: 3000 });
+                } catch { return null; }
+            };
+
+            let emailInput = await getField('input[type="email"], input[name="email"], input[name="username"], input[name="login"]');
+            let passwordInput = await getField('input[type="password"]');
 
             if (!emailInput && !passwordInput) {
                 console.log('[Agent] No login fields found on current page. Searching for "Login" or "Sign In" links...');
@@ -128,10 +136,11 @@ class BrowserAgent {
                 const loginLink = await this.page.getByText(/log in|sign in/i).first();
                 if (await loginLink.isVisible()) {
                     await loginLink.click();
+                    // Wait for navigation or modal
                     await this.page.waitForTimeout(2000);
                     // Re-query inputs
-                    emailInput = await this.page.$('input[type="email"], input[name="email"], input[name="username"], input[name="login"]');
-                    passwordInput = await this.page.$('input[type="password"]');
+                    emailInput = await getField('input[type="email"], input[name="email"], input[name="username"], input[name="login"]');
+                    passwordInput = await getField('input[type="password"]');
                 }
             }
 
